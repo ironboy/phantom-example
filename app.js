@@ -1,4 +1,5 @@
 const phantom = require('phantom');
+const asleep = require('asleep');
 
 // Path to screenshot folder or false (to turn off screenshots)
 const screenshots = __dirname + '/phantom-screenshots/';
@@ -11,6 +12,28 @@ async function fillInBlocketForm(){
   // Create a new page/tab in the brwoser
   const page = await instance.createPage();
 
+  async function waitForPageLoad() {
+    while(! await page.evaluate(function() {
+
+      // No jQuery so can't be done
+      if (window.onOldPage || !window.$) {
+        return false;
+      }
+
+      // Do this on DOM load
+      $(function() {
+        window.domLoaded = true;
+      });
+
+      // Return if the DOM was looaded
+      return window.domLoaded;
+    })) {
+      await asleep(100);
+    }
+  }
+
+
+
   // Set the size of the viewport
   await page.property('viewportSize', {width: 1024, height: 2000});
 
@@ -20,6 +43,7 @@ async function fillInBlocketForm(){
 
   let content = await page.property('content');
 
+  // Fill in basic search form
   // Note: No ES6/ES7 inside evaluated functions!
   page.evaluate(
     function(searchtext, category, counties){
@@ -37,12 +61,33 @@ async function fillInBlocketForm(){
       });
     },
     // Hardcoded test data for now:
-    'Vrålåk med många kubik',
+    'BMW',
     'Motorcyklar',
     ['Jämtland', 'Gävleborg', 'Dalarna']
   );
 
   screenshots && page.render(screenshots + 'blocket1.jpg');
+
+  page.evaluate(function(){
+    $('#searchbutton').click();
+  });
+
+  // Await page load
+  await waitForPageLoad();
+
+  // Now scrape all data
+  let searchResult = await page.evaluate(function(){
+    var content = [];
+    $('#item_list article').each(function(){
+      content.push(this.outerHTML);
+    });
+    return content;
+  });
+
+  screenshots && page.render(screenshots + 'blocket2.jpg');
+
+  console.log(searchResult);
+
   console.log("DONE");
 }
 
